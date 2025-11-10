@@ -6,6 +6,11 @@ on:
       - 'apple/**'
       - 'android/**'
       - 'self-hosting/**'
+  workflow_dispatch:
+
+concurrency:
+  group: self-host-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build-self-hostdocker-images:
@@ -44,18 +49,22 @@ jobs:
           file: packages/api/Dockerfile
           platforms: linux/amd64
           push: true
+          provenance: false
+          sbom: false
           tags: |
             ${{ env.NS }}/omnivore-api:${{ steps.vars.outputs.TAG }}
             ${{ env.NS }}/omnivore-api:latest
 
-      # Web (use the normal Dockerfile you fixed, not Dockerfile-self)
+      # Web (use Dockerfile-self so env is injected at runtime)
       - name: Build & push Web
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: packages/web/Dockerfile
+          file: packages/web/Dockerfile-self
           platforms: linux/amd64
           push: true
+          provenance: false
+          sbom: false
           tags: |
             ${{ env.NS }}/omnivore-web:${{ steps.vars.outputs.TAG }}
             ${{ env.NS }}/omnivore-web:latest
@@ -68,6 +77,8 @@ jobs:
           file: packages/content-fetch/Dockerfile
           platforms: linux/amd64
           push: true
+          provenance: false
+          sbom: false
           tags: |
             ${{ env.NS }}/omnivore-fetch:${{ steps.vars.outputs.TAG }}
             ${{ env.NS }}/omnivore-fetch:latest
@@ -80,6 +91,8 @@ jobs:
           file: packages/db/Dockerfile
           platforms: linux/amd64
           push: true
+          provenance: false
+          sbom: false
           tags: |
             ${{ env.NS }}/omnivore-migrate:${{ steps.vars.outputs.TAG }}
             ${{ env.NS }}/omnivore-migrate:latest
