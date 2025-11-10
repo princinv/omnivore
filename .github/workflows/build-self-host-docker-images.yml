@@ -1,8 +1,7 @@
 name: Build Self-Hosting Docker Images
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
     paths-ignore:
       - 'apple/**'
       - 'android/**'
@@ -14,104 +13,73 @@ jobs:
     permissions:
       contents: read
       packages: write
-      attestations: write
-      id-token: write
     runs-on: ubuntu-latest
+    env:
+      NS: ghcr.io/${{ github.repository_owner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: 'Login to GitHub container registry'
+
+      - name: Compute TAG
+        id: vars
+        run: echo "TAG=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{github.actor}}
-          password: ${{secrets.GITHUB_TOKEN}}
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Docker Buildx
+      - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push backend
+      # API
+      - name: Build & push API
         uses: docker/build-push-action@v6
         with:
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ghcr.io/omnivore-app/sh-backend:latest
+          context: .
           file: packages/api/Dockerfile
-          cache-from: type=registry,ref=ghcr.io/omnivore-app/sh-backend:cache
-          cache-to: type=registry,ref=ghcr.io/omnivore-app/sh-backend:cache,mode=max
-
-      - name: Build and push queue-processor
-        uses: docker/build-push-action@v6
-        with:
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ghcr.io/omnivore-app/sh-queue-processor:latest
-          file: packages/api/queue-processor/Dockerfile
-          cache-from: type=registry,ref=ghcr.io/omnivore-app/sh-queue-processor:cache
-          cache-to: type=registry,ref=ghcr.io/omnivore-app/sh-queue-processor:cache,mode=max
-
-
-      - name: Build and push image-proxy
-        uses: docker/build-push-action@v6
-        with:
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ghcr.io/omnivore-app/sh-image-proxy:latest
-          context: imageproxy/
-          file: imageproxy/Dockerfile
-          cache-from: type=registry,ref=ghcr.io/omnivore-app/sh-image-proxy:cache
-          cache-to: type=registry,ref=ghcr.io/omnivore-app/sh-image-proxy:cache,mode=max
-
-      - name: Build and push content-fetch
-        uses: docker/build-push-action@v6
-        with:
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ghcr.io/omnivore-app/sh-content-fetch:latest
-          file: packages/content-fetch/Dockerfile
-          cache-from: type=registry,ref=ghcr.io/omnivore-app/sh-content-fetch:cache
-          cache-to: type=registry,ref=ghcr.io/omnivore-app/sh-content-fetch:cache,mode=max
-
-      - name: Build and push migrate
-        uses: docker/build-push-action@v6
-        with:
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ghcr.io/omnivore-app/sh-migrate:latest
-          file: packages/db/Dockerfile
-          cache-from: type=registry,ref=ghcr.io/omnivore-app/sh-migrate:cache
-          cache-to: type=registry,ref=ghcr.io/omnivore-app/sh-migrate:cache,mode=max
-
-      - name: Build and push local-mail-watcher
-        uses: docker/build-push-action@v6
-        with:
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ghcr.io/omnivore-app/sh-local-mail-watcher:latest
-          file: packages/local-mail-watcher/Dockerfile
-          cache-from: type=registry,ref=ghcr.io/omnivore-app/sh-local-mail-watcher:cache
-          cache-to: type=registry,ref=ghcr.io/omnivore-app/sh-local-mail-watcher:cache,mode=max
-
-      - name: Build and push web (x86)
-        uses: docker/build-push-action@v6
-        with:
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/omnivore-app/sh-web:latest
-          file: packages/web/Dockerfile-self
-          cache-from: type=registry,ref=ghcr.io/omnivore-app/sh-web:cache
-          cache-to: type=registry,ref=ghcr.io/omnivore-app/sh-web:cache,mode=max
+          tags: |
+            ${{ env.NS }}/omnivore-api:${{ steps.vars.outputs.TAG }}
+            ${{ env.NS }}/omnivore-api:latest
 
-      - name: Build and push web (arm64)
+      # Web (use the normal Dockerfile you fixed, not Dockerfile-self)
+      - name: Build & push Web
         uses: docker/build-push-action@v6
         with:
-          platforms: linux/arm64
+          context: .
+          file: packages/web/Dockerfile
+          platforms: linux/amd64
           push: true
-          tags: ghcr.io/omnivore-app/sh-web:latest
-          file: packages/web/Dockerfile-self
-          cache-from: type=registry,ref=ghcr.io/omnivore-app/sh-web-arm:cache
-          cache-to: type=registry,ref=ghcr.io/omnivore-app/sh-web-arm:cache,mode=max
+          tags: |
+            ${{ env.NS }}/omnivore-web:${{ steps.vars.outputs.TAG }}
+            ${{ env.NS }}/omnivore-web:latest
+
+      # Content Fetch
+      - name: Build & push Fetch
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/content-fetch/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.NS }}/omnivore-fetch:${{ steps.vars.outputs.TAG }}
+            ${{ env.NS }}/omnivore-fetch:latest
+
+      # Migrate (one-shot job image)
+      - name: Build & push Migrate
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/db/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.NS }}/omnivore-migrate:${{ steps.vars.outputs.TAG }}
+            ${{ env.NS }}/omnivore-migrate:latest
